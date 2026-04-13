@@ -2,7 +2,7 @@
 
 > _Created by H33RNAN | Technical tools & algorithm builder (Python / Pine Script)._
 
-![Gravity_Sessions](Gravity_Sessions.png)
+![Gravity_Sessions](GRAVITY_SESSIONS.png)
 
 **[🇪🇸 Español]**
 La mayoría de los indicadores de sesiones ensucian el gráfico con cajas de colores permanentes. **Gravity Sessions** es un motor dinámico diseñado para BTCUSDT (24/7) que rastrea la liquidez, detecta trampas institucionales y calcula la gravedad del precio respecto a la apertura diaria.
