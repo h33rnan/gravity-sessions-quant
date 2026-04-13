@@ -1,0 +1,168 @@
+//@version=6
+indicator("Gravity Sessions", overlay=true, max_boxes_count=500, max_labels_count=500, max_lines_count=500)
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 1. CONFIGURACIÓN TÁCTICA & ESTÉTICA (FAMILIAS TONALES)
+// ═══════════════════════════════════════════════════════════════════════════════
+tz = "America/New_York"
+
+// Familia Asia (Fucsia)
+col_w_pre = input.color(color.new(#ab47bc, 88), "W0: Pre Asia (17:00-20:00)") 
+bd_w_pre  = color.new(col_w_pre, 10)
+col_w0 = input.color(color.new(#e040fb, 88), "W1: Asia (20:00-02:00)")
+bd_w0  = color.new(col_w0, 10)
+
+// Familia London (Naranja)
+col_w1 = input.color(color.new(#f57c00, 88), "W2: Pre London (02:00-03:30)")
+bd_w1  = color.new(col_w1, 10)
+col_w2 = input.color(color.new(#ffb300, 80), "W3: London (03:30-06:30)")
+bd_w2  = color.new(col_w2, 10)
+
+// Familia New York (Verde)
+col_w3 = input.color(color.new(#388e3c, 88), "W4: Pre NYC (06:30-09:00)")
+bd_w3  = color.new(col_w3, 10)
+col_w4 = input.color(color.new(#00e676, 80), "W5: NYC (09:00-11:00)")
+bd_w4  = color.new(col_w4, 10)
+col_w5 = input.color(color.new(#81c784, 88), "W6: NYC Late (11:00-16:00)")
+bd_w5  = color.new(col_w5, 10)
+
+string G_EMA = "Trend Context"
+show_emas = input.bool(false, "Show 50/200 EMAs (Last 300 Bars Only)", group=G_EMA)
+
+pip = syminfo.mintick * 10
+atr_val = ta.atr(14)
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 2. TIMING & TRUE DAY OPEN (TDO)
+// ═══════════════════════════════════════════════════════════════════════════════
+b_s_pre = not na(time(timeframe.period, "1700-2000:1234567", tz))
+b_s0 = not na(time(timeframe.period, "2000-0200:1234567", tz))
+b_s1 = not na(time(timeframe.period, "0200-0330:1234567", tz))
+b_s2 = not na(time(timeframe.period, "0330-0630:1234567", tz))
+b_s3 = not na(time(timeframe.period, "0630-0900:1234567", tz))
+b_s4 = not na(time(timeframe.period, "0900-1100:1234567", tz))
+b_s5 = not na(time(timeframe.period, "1100-1600:1234567", tz))
+
+var float tdo_px = na
+if dayofmonth(time, tz) != dayofmonth(time[1], tz)
+    tdo_px := open
+    line.new(bar_index, tdo_px, bar_index + 10, tdo_px, color=color.new(color.white, 70), style=line.style_dotted, xloc=xloc.bar_index)
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 3. ARQUITECTURA DE DATOS
+// ═══════════════════════════════════════════════════════════════════════════════
+type Session
+    string name
+    box b
+    line l_hi
+    line l_lo
+    label[] sweeps 
+    float hi
+    float lo
+    bool is_active
+    bool hi_mit
+    bool lo_mit
+    bool fully_mit
+    color bd_col
+
+var array<Session> sessions = array.new<Session>()
+
+f_process(is_in, is_new, is_done, s_name, c_bg, c_bd, t_now, t_prev) =>
+    if is_new
+        nb = box.new(t_now, high, t_now, low, xloc=xloc.bar_time, bgcolor=c_bg, border_color=c_bd, text=s_name, text_color=color.new(c_bd, 0), text_size=size.tiny, text_halign=text.align_center, text_valign=text.align_center)
+        array.push(sessions, Session.new(s_name, nb, na, na, array.new<label>(), high, low, true, false, false, false, c_bd))
+    if is_in
+        for s in sessions
+            if s.name == s_name and s.is_active
+                s.hi := math.max(s.hi, high), s.lo := math.min(s.lo, low)
+                box.set_top(s.b, s.hi), box.set_bottom(s.b, s.lo), box.set_right(s.b, t_now)
+                p = math.round((s.hi - s.lo) / pip, 1)
+                box.set_text(s.b, s.name + "\n" + str.tostring(p) + "p")
+    if is_done
+        for s in sessions
+            if s.name == s_name and s.is_active
+                s.is_active := false
+                s.l_hi := line.new(t_prev, s.hi, t_now, s.hi, xloc=xloc.bar_time, extend=extend.right, color=c_bd)
+                s.l_lo := line.new(t_prev, s.lo, t_now, s.lo, xloc=xloc.bar_time, extend=extend.right, color=c_bd)
+
+f_process(b_s_pre, b_s_pre and not b_s_pre[1], not b_s_pre and b_s_pre[1], "Pre Asia", col_w_pre, bd_w_pre, time, time[1])
+f_process(b_s0, b_s0 and not b_s0[1], not b_s0 and b_s0[1], "Asia", col_w0, bd_w0, time, time[1])
+f_process(b_s1, b_s1 and not b_s1[1], not b_s1 and b_s1[1], "Pre London", col_w1, bd_w1, time, time[1])
+f_process(b_s2, b_s2 and not b_s2[1], not b_s2 and b_s2[1], "London", col_w2, bd_w2, time, time[1])
+f_process(b_s3, b_s3 and not b_s3[1], not b_s3 and b_s3[1], "Pre NYC", col_w3, bd_w3, time, time[1])
+f_process(b_s4, b_s4 and not b_s4[1], not b_s4 and b_s4[1], "NYC", col_w4, bd_w4, time, time[1])
+f_process(b_s5, b_s5 and not b_s5[1], not b_s5 and b_s5[1], "NYC Late", col_w5, bd_w5, time, time[1])
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 4. MITIGACIÓN & JUDAS SWEEP
+// ═══════════════════════════════════════════════════════════════════════════════
+if array.size(sessions) > 0
+    for i = array.size(sessions) - 1 to 0
+        s = array.get(sessions, i)
+        if not s.is_active and not s.fully_mit
+            if not s.hi_mit
+                if high > s.hi and close <= s.hi
+                    lbl = label.new(bar_index, high, "✗", color=color.new(color.white, 100), textcolor=s.bd_col, style=label.style_label_down, size=size.tiny)
+                    array.push(s.sweeps, lbl)
+                if close > s.hi
+                    s.hi_mit := true
+                    line.delete(s.l_hi)
+            if not s.lo_mit
+                if low < s.lo and close >= s.lo
+                    lbl = label.new(bar_index, low, "✗", color=color.new(color.white, 100), textcolor=s.bd_col, style=label.style_label_up, size=size.tiny)
+                    array.push(s.sweeps, lbl)
+                if close < s.lo
+                    s.lo_mit := true
+                    line.delete(s.l_lo)
+                    
+            if s.hi_mit and s.lo_mit
+                s.fully_mit := true
+                box.set_bgcolor(s.b, color.new(#1a1a1a, 90))
+                box.set_border_color(s.b, color.new(#333333, 80))
+                box.set_text_color(s.b, color.new(#424242, 50)) 
+                if array.size(s.sweeps) > 0
+                    for sw in s.sweeps
+                        label.delete(sw)
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 5. CONTEXTO DE TENDENCIA (EMAS CON AMNESIA VISUAL)
+// ═══════════════════════════════════════════════════════════════════════════════
+ema50  = ta.ema(close, 50)
+ema200 = ta.ema(close, 200)
+
+// Cálculo de visibilidad: Las últimas 300 velas se pintan sólidas, el resto gris oscuro.
+bool is_recent = (last_bar_index - bar_index) <= 300
+color c_ema50  = show_emas ? (is_recent ? color.new(#2962ff, 0) : color.new(#333333, 70)) : na // Azul
+color c_ema200 = show_emas ? (is_recent ? color.new(#ff5252, 0) : color.new(#333333, 70)) : na // Rojo
+
+plot(show_emas ? ema50 : na, "EMA 50", color=c_ema50, linewidth=1)
+plot(show_emas ? ema200 : na, "EMA 200", color=c_ema200, linewidth=1)
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 6. HUD QUANT: TDO GRAVITY OSCILLATOR (UPPERCASE)
+// ═══════════════════════════════════════════════════════════════════════════════
+var table hud = table.new(position.bottom_right, 2, 3, border_width=0, bgcolor=color.new(color.black, 100))
+
+if barstate.islast
+    string active_name = "OVERLAP"
+    color active_col = color.new(color.white, 50)
+    for s in sessions
+        if s.is_active
+            active_name := str.upper(s.name) 
+            active_col := s.bd_col
+            break
+
+    float dist_tdo = close - tdo_px
+    float tdo_ratio = math.abs(dist_tdo / atr_val)
+    string pull_status = tdo_ratio < 0.8 ? "NEUTRAL" : (tdo_ratio < 1.5 ? "TENSION" : "EXTREME")
+    string bias = dist_tdo > 0 ? "PREMIUM" : "DISCOUNT"
+    color bias_col = dist_tdo > 0 ? color.new(#ff5252, 0) : color.new(#00e676, 0)
+
+    table.cell(hud, 0, 0, "[ GRAVITY SESSIONS ]", text_color=color.white, text_size=size.small, text_halign=text.align_left)
+    table.cell(hud, 1, 0, "| CREATED BY H33RNAN", text_color=color.new(#ffffff, 0), text_size=size.small, text_halign=text.align_right)
+    
+    table.cell(hud, 0, 1, "ACTIVE: " + active_name, text_color=active_col, text_size=size.small, text_halign=text.align_left)
+    table.cell(hud, 1, 1, "| BIAS: " + bias, text_color=bias_col, text_size=size.small, text_halign=text.align_right)
+
+    table.cell(hud, 0, 2, "TDO PULL: " + pull_status, text_color=bias_col, text_size=size.small, text_halign=text.align_left)
+    table.cell(hud, 1, 2, "| SIGMA: " + str.tostring(math.round(tdo_ratio, 2)) + " ATR", text_color=color.new(color.white, 50), text_size=size.small, text_halign=text.align_right)
